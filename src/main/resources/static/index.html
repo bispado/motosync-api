@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Motosync - Painel Simples</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f6f8fb; }
+        header { background: #1f2937; color: #fff; padding: 1rem 2rem; }
+        main { padding: 2rem; display: flex; flex-wrap: wrap; gap: 2rem; }
+        section { background: #fff; border-radius: 8px; padding: 1.5rem; flex: 1 1 320px; box-shadow: 0 10px 30px rgba(31,41,55,0.08); }
+        h2 { margin-top: 0; color: #1f2937; }
+        label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
+        input, textarea, select { width: 100%; padding: 0.5rem; margin-bottom: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; }
+        button { background: #2563eb; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        button:hover { background: #1d4ed8; }
+        ul { list-style: none; padding: 0; margin: 0; }
+        li { border-bottom: 1px solid #e5e7eb; padding: 0.5rem 0; }
+        small { color: #6b7280; display: block; }
+        .status { margin-top: 1rem; font-size: 0.9rem; color: #047857; }
+        .error { color: #dc2626; }
+        .two-columns { display: flex; gap: 1rem; }
+        .two-columns > div { flex: 1; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Motosync - Gest\u00e3o de Motos</h1>
+</header>
+<main>
+    <section>
+        <h2>Filiais</h2>
+        <form id="filial-form">
+            <input type="hidden" id="filial-id">
+            <label for="filial-nome">Nome</label>
+            <input id="filial-nome" required>
+            <label for="filial-endereco">Endere\u00e7o</label>
+            <textarea id="filial-endereco" rows="2" required></textarea>
+            <div class="two-columns">
+                <div>
+                    <label for="filial-contato">Contato</label>
+                    <input id="filial-contato">
+                </div>
+                <div>
+                    <label for="filial-horario">Hor\u00e1rio</label>
+                    <input id="filial-horario">
+                </div>
+            </div>
+            <button type="submit">Salvar Filial</button>
+            <p id="filial-status" class="status"></p>
+        </form>
+        <ul id="filial-list"></ul>
+    </section>
+
+    <section>
+        <h2>Usu\u00e1rios</h2>
+        <form id="usuario-form">
+            <input type="hidden" id="usuario-id">
+            <label for="usuario-email">E-mail</label>
+            <input id="usuario-email" type="email" required>
+            <label for="usuario-cpf">CPF (11 d\u00edgitos)</label>
+            <input id="usuario-cpf" required maxlength="11">
+            <div class="two-columns">
+                <div>
+                    <label for="usuario-nome">Nome</label>
+                    <input id="usuario-nome" required>
+                </div>
+                <div>
+                    <label for="usuario-telefone">Telefone</label>
+                    <input id="usuario-telefone">
+                </div>
+            </div>
+            <label for="usuario-senha">Senha</label>
+            <input id="usuario-senha" type="password" required>
+            <label for="usuario-filial">Filial</label>
+            <select id="usuario-filial">
+                <option value="">Selecione</option>
+            </select>
+            <button type="submit">Salvar Usu\u00e1rio</button>
+            <p id="usuario-status" class="status"></p>
+        </form>
+        <ul id="usuario-list"></ul>
+    </section>
+
+    <section>
+        <h2>Motos</h2>
+        <form id="moto-form">
+            <input type="hidden" id="moto-id">
+            <label for="moto-modelo">Modelo</label>
+            <input id="moto-modelo" required>
+            <div class="two-columns">
+                <div>
+                    <label for="moto-placa">Placa</label>
+                    <input id="moto-placa" required maxlength="10">
+                </div>
+                <div>
+                    <label for="moto-chassi">Chassi</label>
+                    <input id="moto-chassi" required maxlength="50">
+                </div>
+            </div>
+            <label for="moto-responsavel">Respons\u00e1vel</label>
+            <select id="moto-responsavel">
+                <option value="">Selecione</option>
+            </select>
+            <label for="moto-filial">Filial</label>
+            <select id="moto-filial">
+                <option value="">Selecione</option>
+            </select>
+            <label for="moto-localizacao">Localiza\u00e7\u00e3o</label>
+            <input id="moto-localizacao">
+            <label for="moto-status">Status Atual</label>
+            <textarea id="moto-status" rows="2"></textarea>
+            <button type="submit">Salvar Moto</button>
+            <p id="moto-status-text" class="status"></p>
+        </form>
+        <ul id="moto-list"></ul>
+    </section>
+</main>
+
+<script>
+    const api = {
+        filiais: '/api/filiais',
+        usuarios: '/api/usuarios',
+        motos: '/api/motos'
+    };
+
+    const forms = {
+        filial: document.getElementById('filial-form'),
+        usuario: document.getElementById('usuario-form'),
+        moto: document.getElementById('moto-form')
+    };
+
+    const lists = {
+        filiais: document.getElementById('filial-list'),
+        usuarios: document.getElementById('usuario-list'),
+        motos: document.getElementById('moto-list')
+    };
+
+    const statusTexts = {
+        filial: document.getElementById('filial-status'),
+        usuario: document.getElementById('usuario-status'),
+        moto: document.getElementById('moto-status-text')
+    };
+
+    async function request(url, method = 'GET', data) {
+        const config = { method, headers: { 'Content-Type': 'application/json' } };
+        if (data) config.body = JSON.stringify(data);
+
+        const response = await fetch(url, config);
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || error.errors || 'Erro ao processar requisi\u00e7\u00e3o');
+        }
+        if (response.status === 204) return null;
+        return response.json();
+    }
+
+    function clearStatus() {
+        Object.values(statusTexts).forEach(el => { el.textContent = ''; el.classList.remove('error'); });
+    }
+
+    function showStatus(target, message, isError = false) {
+        target.textContent = message;
+        target.classList.toggle('error', isError);
+        if (!isError) {
+            setTimeout(() => target.textContent = '', 2500);
+        }
+    }
+
+    async function loadFiliais() {
+        const filiais = await request(api.filiais);
+        lists.filiais.innerHTML = filiais.map(f => `
+            <li data-id="${f.id}">
+                <strong>${f.nome}</strong>
+                <small>${f.endereco}</small>
+                <small>${f.contato || 'Sem contato'}</small>
+                <div>
+                    <button onclick="editarFilial(${f.id})">Editar</button>
+                    <button onclick="excluirFilial(${f.id})">Excluir</button>
+                </div>
+            </li>
+        `).join('');
+
+        const selectFilial = document.getElementById('usuario-filial');
+        const selectMotoFilial = document.getElementById('moto-filial');
+        const options = `<option value="">Selecione</option>` + filiais.map(f => `<option value="${f.id}">${f.nome}</option>`).join('');
+        selectFilial.innerHTML = options;
+        selectMotoFilial.innerHTML = options;
+    }
+
+    async function loadUsuarios() {
+        const usuarios = await request(api.usuarios);
+        lists.usuarios.innerHTML = usuarios.map(u => `
+            <li data-id="${u.id}">
+                <strong>${u.nome}</strong> <small>${u.email}</small>
+                <small>CPF: ${u.cpf} | Filial: ${u.filialNome || 'N/A'}</small>
+                <div>
+                    <button onclick="editarUsuario(${u.id})">Editar</button>
+                    <button onclick="excluirUsuario(${u.id})">Excluir</button>
+                </div>
+            </li>
+        `).join('');
+
+        const selectResponsavel = document.getElementById('moto-responsavel');
+        const options = `<option value="">Selecione</option>` + usuarios.map(u => `<option value="${u.id}">${u.nome}</option>`).join('');
+        selectResponsavel.innerHTML = options;
+    }
+
+    async function loadMotos() {
+        const motos = await request(api.motos);
+        lists.motos.innerHTML = motos.map(m => `
+            <li data-id="${m.id}">
+                <strong>${m.modelo} - ${m.placa}</strong>
+                <small>Chassi: ${m.chassi}</small>
+                <small>Respons\u00e1vel: ${m.responsavelNome || 'N/A'} | Filial: ${m.filialNome || 'N/A'}</small>
+                <small>Status: ${m.statusAtual || 'N/A'}</small>
+                <div>
+                    <button onclick="editarMoto(${m.id})">Editar</button>
+                    <button onclick="excluirMoto(${m.id})">Excluir</button>
+                </div>
+            </li>
+        `).join('');
+    }
+
+    forms.filial.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearStatus();
+        const data = {
+            nome: document.getElementById('filial-nome').value,
+            endereco: document.getElementById('filial-endereco').value,
+            contato: document.getElementById('filial-contato').value,
+            horarioFuncionamento: document.getElementById('filial-horario').value
+        };
+        const id = document.getElementById('filial-id').value;
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `${api.filiais}/${id}` : api.filiais;
+        try {
+            await request(url, method, data);
+            showStatus(statusTexts.filial, 'Filial salva com sucesso!');
+            forms.filial.reset();
+            document.getElementById('filial-id').value = '';
+            await loadFiliais();
+        } catch (err) {
+            showStatus(statusTexts.filial, err.message, true);
+        }
+    });
+
+    forms.usuario.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearStatus();
+        const data = {
+            email: document.getElementById('usuario-email').value,
+            cpf: document.getElementById('usuario-cpf').value,
+            telefone: document.getElementById('usuario-telefone').value,
+            nome: document.getElementById('usuario-nome').value,
+            senha: document.getElementById('usuario-senha').value,
+            filialId: document.getElementById('usuario-filial').value || null
+        };
+        const id = document.getElementById('usuario-id').value;
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `${api.usuarios}/${id}` : api.usuarios;
+        try {
+            await request(url, method, data);
+            showStatus(statusTexts.usuario, 'Usu\u00e1rio salvo com sucesso!');
+            forms.usuario.reset();
+            document.getElementById('usuario-id').value = '';
+            await loadUsuarios();
+            await loadMotos();
+        } catch (err) {
+            showStatus(statusTexts.usuario, err.message, true);
+        }
+    });
+
+    forms.moto.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearStatus();
+        const data = {
+            modelo: document.getElementById('moto-modelo').value,
+            placa: document.getElementById('moto-placa').value,
+            chassi: document.getElementById('moto-chassi').value,
+            responsavelId: document.getElementById('moto-responsavel').value || null,
+            filialId: document.getElementById('moto-filial').value || null,
+            localizacao: document.getElementById('moto-localizacao').value,
+            statusAtual: document.getElementById('moto-status').value,
+            iotInfo: null,
+            rfidTag: null
+        };
+        const id = document.getElementById('moto-id').value;
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `${api.motos}/${id}` : api.motos;
+        try {
+            await request(url, method, data);
+            showStatus(statusTexts.moto, 'Moto salva com sucesso!');
+            forms.moto.reset();
+            document.getElementById('moto-id').value = '';
+            await loadMotos();
+        } catch (err) {
+            showStatus(statusTexts.moto, err.message, true);
+        }
+    });
+
+    window.editarFilial = async (id) => {
+        clearStatus();
+        const filial = await request(`${api.filiais}/${id}`);
+        document.getElementById('filial-id').value = filial.id;
+        document.getElementById('filial-nome').value = filial.nome;
+        document.getElementById('filial-endereco').value = filial.endereco;
+        document.getElementById('filial-contato').value = filial.contato || '';
+        document.getElementById('filial-horario').value = filial.horarioFuncionamento || '';
+    };
+
+    window.excluirFilial = async (id) => {
+        if (!confirm('Excluir esta filial?')) return;
+        try {
+            await request(`${api.filiais}/${id}`, 'DELETE');
+            await loadFiliais();
+            await loadUsuarios();
+            await loadMotos();
+        } catch (err) {
+            showStatus(statusTexts.filial, err.message, true);
+        }
+    };
+
+    window.editarUsuario = async (id) => {
+        clearStatus();
+        const usuario = await request(`${api.usuarios}/${id}`);
+        document.getElementById('usuario-id').value = usuario.id;
+        document.getElementById('usuario-email').value = usuario.email;
+        document.getElementById('usuario-cpf').value = usuario.cpf;
+        document.getElementById('usuario-telefone').value = usuario.telefone || '';
+        document.getElementById('usuario-nome').value = usuario.nome;
+        document.getElementById('usuario-senha').value = '';
+        document.getElementById('usuario-filial').value = usuario.filialId || '';
+    };
+
+    window.excluirUsuario = async (id) => {
+        if (!confirm('Excluir este usu\u00e1rio?')) return;
+        try {
+            await request(`${api.usuarios}/${id}`, 'DELETE');
+            await loadUsuarios();
+            await loadMotos();
+        } catch (err) {
+            showStatus(statusTexts.usuario, err.message, true);
+        }
+    };
+
+    window.editarMoto = async (id) => {
+        clearStatus();
+        const moto = await request(`${api.motos}/${id}`);
+        document.getElementById('moto-id').value = moto.id;
+        document.getElementById('moto-modelo').value = moto.modelo;
+        document.getElementById('moto-placa').value = moto.placa;
+        document.getElementById('moto-chassi').value = moto.chassi;
+        document.getElementById('moto-responsavel').value = moto.responsavelId || '';
+        document.getElementById('moto-filial').value = moto.filialId || '';
+        document.getElementById('moto-localizacao').value = moto.localizacao || '';
+        document.getElementById('moto-status').value = moto.statusAtual || '';
+    };
+
+    window.excluirMoto = async (id) => {
+        if (!confirm('Excluir esta moto?')) return;
+        try {
+            await request(`${api.motos}/${id}`, 'DELETE');
+            await loadMotos();
+        } catch (err) {
+            showStatus(statusTexts.moto, err.message, true);
+        }
+    };
+
+    async function init() {
+        try {
+            await loadFiliais();
+            await loadUsuarios();
+            await loadMotos();
+        } catch (err) {
+            console.error('Erro ao carregar dados iniciais', err);
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>
+
